@@ -1,0 +1,205 @@
+S/4HANA ubuntu linux docker설치 명령어 모음
+
+#ubuntu linux명령어들
+  #커널확인
+         $uname -r
+  #메모리확인
+         $free -h
+  #CPU관련정보 확인:core수 확인
+         $lscpu  
+  #OS정보 확인
+         $cat /etc/os-release
+  #disk용량확인
+         $sudo df -h -T        
+  #IP확인 
+         $sudo ifconfig  
+         *ifconfig command not found나오면 $sudo apt install net-tools 입력
+         ** password입력하라고 나오면 로그인 pw 'hana'를 입력
+   #root password변경하기(보안을 위해)
+         $sudo passwd root
+         ** 일단 guru와 동일하게 입력(hana), 
+            (보안을 위해 달라야 하지만 linux초보자는 같도록 함)
+
+# 우분투 리눅스에 docker install 하기
+  $ sudo apt update
+  $ sudo apt upgrade
+  # 보라색 화면이 나타나면 'ok' 누른다
+ # docs.docker.com의 안내에 따라 설치 (docker engine으로 설치 한다)
+
+#** 우분투서버 terminal에서 우분투 명령어가copy&paste가 안먹으면, mobaXterm등 ssh termina로 연결하여 작업한다.  
+# mobaXterm은 Home edition설치(다운로드: https://mobaxterm.mobatek.net/downloa... , 
+#             사용법: https://youtu.be/F8m3N_nccdY )
+# 이때 mobaXterm 연결을 위해 
+#   virtualBox Network ubuntu server(saps4hana)에서 설정 -> 네트워크를 브릿지로 설정하고 재 부팅 해야한다
+#    (ip가 192.168.0.x)가 될것이다)
+
+# 여기부터 Docker Engine 설치 명령어  # Install Docker Engine on Ubuntu 
+# Install using the repository 
+  $ sudo apt-get update
+  $ sudo apt-get install   ca-certificates   curl   gnupg     lsb-release
+  $  sudo mkdir -p /etc/apt/keyrings
+  $  curl -fsSL https://download.docker.com/linux/ubu... | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  $ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# Install Docker Engine
+  $ sudo apt-get update
+  $ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+# 보라색 화면이 나오면 'ok'를 누른다
+
+# 우부투리눅스의 dcoker가 잘 설치되었다면 서비스 실행 하기
+  $ sudo systemctl enable --now docker
+# dcoker 실행 확인 하기
+  $ sudo systemctl status docker          
+  #-> 녹색의 docker enable확인 한다
+
+##sap s/4hana abap docker image다운로드 및 실행
+ #가입했던 hub.docker.com에 Login 하기
+ #  root로 전환, 당연히 인터넷 연결되어 있어야 함
+ $  su –
+ $  whoami 
+    #입력하여 root확인
+ $ sudo docker login
+      <Your Docker Hub UserID>
+      <Your Docker Hub PASS>
+ # login success나오면 
+   $ exit
+ #하여 root에서 빠져나옴 
+ #    * root에서 다운 받아야 한다고 해서 hub.docker.com을 root로 로그인 함
+   $  whoami 
+    #-> 입력하여 guru 확인
+
+## 드디어 S/4HANA  docker 이미지 다운받기
+  $ sudo docker pull amitlaldocker/abaptrial:1909     
+#  유선랜으로 1시간 정도 잡아야 함
+#  정상적으로 다운 받아지면 아래 명령어로
+  $ sudo docker images 
+# 하면 1개가 63G 크기로 정도로 보여야 함     
+           guru@guru-server:~$ sudo docker images
+             [sudo] password for guru:
+           REPOSITORY                TAG       IMAGE ID       CREATED         SIZE
+           amitlaldocker/abaptrial   1909      ac112070004c   20 months ago   62.4GB
+           guru@guru-server:~$
+
+
+## 자 이제 다운받은 SAP S/4HANA이미지 실행해 보자
+# 먼저 Ubuntu  환경변수 설정을 한다
+  #-> VM을 restart하거나 우분투를 restart할때 아래 환경변수와 방화벽 해제 실행하는 것 잊지말자
+  $ sudo sysctl vm.max_map_count=2147483647  
+  $ sudo sysctl fs.aio-max-nr=18446744073709551615
+
+#본격적인  SAP S/4HANA 이미지를 실행하기(S/4HANA 컨테이너 실행)
+  $ sudo docker run --stop-timeout 3600 -it --name a4h -h vhcala4hci   --sysctl kernel.shmmni=32768 --ulimit nofile=1048576:1048576 -p 3200:3200 -p 3300:3300 -p 8443:8443 -p 30213:30213 -p 50000:50000 -p 50001:50001 amitlaldocker/abaptrial:1909 -skip-limits-check -agree-to-sap-license
+# 약 15분이상이 소요되며, 
+    '*** Have fun! ***' 이 메시지가 보이면 sap 서버 start성공인데...
+
+  ## 이런 에러를 만날 것이다
+      !!! HDB license has expired !!!
+      ---
+      그러면 아래에서 라이선스 다운받아야한다
+         https://go.support.sap.com/minisap/#/... 
+      로그인 안해도 되면, 이메일 과  HDB HW key가 꼭 필요하다
+      SAP S/4 HANA를 위한 라이선스 키는 2개가 필요한데…
+      DB 를 위한 HDB.txt와  SAP application을 위한  A4H_Multiple.txt 파일 이다
+      다운로드는 같은 곳에서(위 URL) 받지만 선택 값을 다르게 입력 한다
+      지금은 DB 를 위한 HDB.txt만 필요하므로 위 URL에서 다운로드 받아 ubuntu(VM)에     copy(예:/home/guru/)하고 ,  파일permission확인 한다 
+              서버선택 : HDB - SAP HANA Platform Edition (64GB)
+              , 개인정보 입력, HW key입력 하면 HDB.txt 다운 받음
+       이제 ubuntu에 copy한 파일을 아래 명령으로 docker의 SAP폴더로 copy  한다
+       $sudo docker cp /home/guru/HDB.txt a4h:/opt/sap/HDB_license
+
+  ##* 참고로 A4H_Multiple.txt 파일은
+              서버선택 : A4H - SAP NetWeaver AS ABAP 7.4 and above (Linux / SAP HANA)
+              , 개인정보 입력, HW key입력 하면 A4H_Multiple.txt 다운 받아짐
+        ubuntu에 copy한 파일을 아래 명령으로 docker의 SAP폴더로 copy명령
+           $sudo docker cp /home/guru/A4H_Multiple.txt a4h:/opt/sap/ASABAP_license
+
+
+        $sudo docker cp /home/guru/HDB.txt a4h:/opt/sap/HDB_license
+        #위명령어 잘 실행 했으면 …,    컨테이너(a4h) stop하기
+        $sudo docker stop -t 7200 a4h
+        일정 시간이 지나고 ' Error response from daemon: cannot stop container: a4h: permission denied'
+        이 메시지가 나오고 stop이 안될것이다.(메시지 안나오면 skip)
+        그러면 리눅스 보안관련된 파일을 삭제 하고 , 다시한번한다
+             guru@guru-server:~$ sudo aa-remove-unknown
+             Skipping profile in /etc/apparmor.d/disable: usr.sbin.rsyslogd
+             Removing 'snap.prometheus.promtool' 
+             Removing 'snap.prometheus.prometheus'
+             Removing 'snap.powershell.powershell'
+              ....
+         다시 정지 시키면 
+           guru@guru-server:~$ sudo docker stop -t 7200 a4h
+           a4h
+         정지가 될 것이다 , 정지가 잘 되었다면...
+              $sudo docker ps  하면 안보이고 $sudo docker ps -a하면 보일 것이다      
+     ( 그래도 stop 안되면 ubuntu  재 시작 , $sudo shutdown -h now 또는
+            $sudo poweroff 로    ubuntu 재 시작하고) 
+     #s4hana 이미지 확인
+      $ sudo docker images 
+     { amitlaldocker/abaptrial:1909 이거 안보이면... 
+      ‘SAP S/4HANA docker image 다운로드 실행하기-   Ubuntu  환경변수 설정’ 부터 다시 진행}
+      아래와 같이 보이면.. 
+                    guru@guru-server:~$ sudo docker images
+                    [sudo] password for guru:
+                    REPOSITORY                TAG       IMAGE ID       CREATED         SIZE
+                    amitlaldocker/abaptrial   1909      ac112070004c   20 months ago   62.4GB
+                    guru@guru-server:~$
+
+       images가 있는 것이니까 .., 컨테이너 확인
+       $sudo docker ps  하면 안보이고 $sudo docker ps -a하면 보일 것이다 -> 정지 상태
+        a4h 컨테이너 정지 상태에서 라이선스 copy 잘 했는지 확인하고, 
+        다시 SAP start해 본다
+       $ sudo docker  start a4h
+       # 수시로 로그 확인 하기  $sudo docker logs a4h   
+       #Sap start는 15분 이상 걸리므로 수시로 확인,
+       #'*** Have fun! ***' 이 메시지가 보이면 sap 서버 start성공
+
+     #만약 $sudo docker ps –a해서 안보이고,   $ sudo docker images  로 
+   #   amitlaldocker/abaptrial:1909 이거 보인다면...
+   #SAP docker image만 있는 것 이므로 아래 명령으로  start시킴
+    $sudo docker run --stop-timeout 3600 -it --name a4h -h vhcala4hci   --sysctl kernel.shmmni=32768 --ulimit nofile=1048576:1048576 -p 3200:3200 -p 3300:3300 -p 8443:8443 -p 30213:30213 -p 50000:50000 -p 50001:50001 amitlaldocker/abaptrial:1909 -skip-limits-check -agree-to-sap-license
+
+  {  또한, $ sudo docker images  로   amitlaldocker/abaptrial:1909 도 안 보인다면
+ ‘SAP S/4HANA docker image 다운로드 실행하기를  Ubuntu  환경변수 설정’ 부터 다시 설정 진행 하고 이미지 다운로드를 다시 해야 한다 } 
+
+#아무튼 
+# SAP 로그에서 $ sudo docker logs a4h
+   '*** Have fun! ***' 이 메시지가 보이면 sap 서버 start성공
+ # SAP실행 확인 - A4H 
+     $sudo docker ps 
+ #여기에서 내역이 보일 것이다
+
+ ##  SAP GUI 접속을 위한 방화벽 해제하기
+    $ sudo ufw disable
+
+ ##  SAP GUI로 정상 접속 되었다면 , SAP 로그인 창이 나타나고
+ #    로그인 조건에  - 개발자 최초ID
+        Client:  001
+        User:  DEVELOPER
+        Password: Ldtf5432
+
+    
+##SAPGUI 화면에서 error 확인하자
+    SAP GUI로 001 client 는 정상 접속이 안되지만 , 000 client 관리자는 접속된다. 
+    따라서 , SAP 로그인 창에서 아래와 같이 입력하고 접속한다 
+        Client:  000
+        User:  SAP*
+        Password: Ldtf5432
+
+      그러면 아래에서 라이선스 다운받아야한다
+         https://go.support.sap.com/minisap/#/... 
+       SAP application을 위한  A4H_Multiple.txt 파일 이다
+      선택 값을  입력 하고 
+              서버선택 : A4H - SAP NetWeaver AS ABAP 7.4 and above (Linux / SAP HANA)
+              , 개인정보 입력, HW key입력 하면 A4H_Multiple.txt 다운 받아짐
+  t-code넣는 란에 'SLICENSE'를 입력하고 라이선스 확인화면으로 가면…   아마도 만료된 라이선스가 보일것이다(적색 신호등).     우리에게 중요한것은 HW key 이다   HW key 다시 확인하고(SAP GUI그대로 두고) , 
+        라이선스 다운 받은 내역을 아래 명령어로 넣는다
+    이제 다운받은 라이선스(A4H_Multiple.txt)파일 copy 하고(아래 명령어)
+        $   sudo docker cp /home/guru/A4H_Multiple.txt a4h:/opt/sap/ASABAP_license
+    라이선스를 update 실행해 준다 ,아래 명령어
+        $ sudo docker exec -it a4h /usr/local/bin/asabap_license_update
+
+    다시 SAP GUI의  t-code넣는 란에 'SLICENSE'를 입력하여 정상적인 라이선스(녹색신호등) 확인
+   SAP GUI 관리자(SAP*) 로그 아웃 하고, ABAP개발을 위해서 아래 정보로 재 로그인 한다 
+        Client:  001
+        User:  DEVELOPER
+        Password: Ldtf5432     
+  정상적으로 로그인이 될 것입니다
